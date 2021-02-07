@@ -1,0 +1,8 @@
+setup.py
+sqaapitest/__init__.py
+sqaapitest.egg-info/PKG-INFO
+sqaapitest.egg-info/SOURCES.txt
+sqaapitest.egg-info/dependency_links.txt
+sqaapitest.egg-info/top_level.txt
+sqaapitest/src/__init__.py
+sqaapitest/tests/__init__.py

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>customers.html</h1>
+    <p>Report generated on 21-Sep-2020 at 15:02:52 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.9.0", "pytest": "6.0.1"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Linux-5.4.0-42-generic-x86_64-with-glibc2.27</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"html": "2.1.1", "metadata": "1.10.0"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.8.0</td></tr></table>
+    <h2>Summary</h2>
+    <p>3 tests ran in 1.93 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">3 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">0 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/customers/test_create_customer_fail_existing_email.py::test_create_cust_fail_existing_email</td>
+          <td class="col-duration">0.51</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[35mDEBUG   [0m root:db_utility.py:23 Executing : SELECT * FROM local.wp_users ORDER BY id DESC LIMIT 5000;
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:77 Signing request &lt;PreparedRequest [POST]&gt; using client &lt;Client client_key=ck_406159a820b33cd821d190656b5ae98ae940275a, client_secret=****, resource_owner_key=None, resource_owner_secret=None, signature_method=HMAC-SHA1, signature_type=AUTH_HEADER, callback_uri=None, rsa_key=None, verifier=None, realm=None, encoding=utf-8, decoding=utf-8, nonce=None, timestamp=None&gt;
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:91 Including body in call to sign: False
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:133 Collected params: [(&#x27;oauth_nonce&#x27;, &#x27;150547266529225628561600680770&#x27;), (&#x27;oauth_timestamp&#x27;, &#x27;1600680770&#x27;), (&#x27;oauth_version&#x27;, &#x27;1.0&#x27;), (&#x27;oauth_signature_method&#x27;, &#x27;HMAC-SHA1&#x27;), (&#x27;oauth_consumer_key&#x27;, &#x27;ck_406159a820b33cd821d190656b5ae98ae940275a&#x27;)]
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:137 Normalized params: oauth_consumer_key=ck_406159a820b33cd821d190656b5ae98ae940275a&amp;oauth_nonce=150547266529225628561600680770&amp;oauth_signature_method=HMAC-SHA1&amp;oauth_timestamp=1600680770&amp;oauth_version=1.0
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:138 Normalized URI: http://localhost:10003/wp-json/wc/v3/customers
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:143 Signing: signature base string: POST&amp;http%3A%2F%2Flocalhost%3A10003%2Fwp-json%2Fwc%2Fv3%2Fcustomers&amp;oauth_consumer_key%3Dck_406159a820b33cd821d190656b5ae98ae940275a%26oauth_nonce%3D150547266529225628561600680770%26oauth_signature_method%3DHMAC-SHA1%26oauth_timestamp%3D1600680770%26oauth_version%3D1.0
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:150 Signature: okOcpnHG8Pwv/J+VCE9evr+An68=
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:320 Encoding URI, headers and body to utf-8.
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:114 Updated url: http://localhost:10003/wp-json/wc/v3/customers
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:115 Updated headers: {b&#x27;User-Agent&#x27;: b&#x27;python-requests/2.24.0&#x27;, b&#x27;Accept-Encoding&#x27;: b&#x27;gzip, deflate&#x27;, b&#x27;Accept&#x27;: b&#x27;*/*&#x27;, b&#x27;Connection&#x27;: b&#x27;keep-alive&#x27;, b&#x27;Content-type&#x27;: b&#x27;application/json&#x27;, b&#x27;Content-Length&#x27;: b&#x27;69&#x27;, b&#x27;Authorization&#x27;: b&#x27;OAuth oauth_nonce=&quot;150547266529225628561600680770&quot;, oauth_timestamp=&quot;1600680770&quot;, oauth_version=&quot;1.0&quot;, oauth_signature_method=&quot;HMAC-SHA1&quot;, oauth_consumer_key=&quot;ck_406159a820b33cd821d190656b5ae98ae940275a&quot;, oauth_signature=&quot;okOcpnHG8Pwv%2FJ%2BVCE9evr%2BAn68%3D&quot;&#x27;}
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:116 Updated body: &#x27;{&quot;email&quot;: &quot;testuser.ewsssmeszw@example.com&quot;, &quot;password&quot;: &quot;password1&quot;}&#x27;
+[35mDEBUG   [0m urllib3.connectionpool:connectionpool.py:226 Starting new HTTP connection (1): localhost:10003
+[35mDEBUG   [0m urllib3.connectionpool:connectionpool.py:433 http://localhost:10003 &quot;POST /wp-json/wc/v3/customers HTTP/1.1&quot; 400 None
+[35mDEBUG   [0m root:requestutility.py:32 POST API response : {&#x27;code&#x27;: &#x27;registration-error-email-exists&#x27;, &#x27;message&#x27;: &#x27;An account is already registered with your email address. &lt;a href=&quot;#&quot; class=&quot;showlogin&quot;&gt;Please log in.&lt;/a&gt;&#x27;, &#x27;data&#x27;: {&#x27;status&#x27;: 400}}<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/customers/test_create_customers_smoke.py::test_create_customer_only_email_password</td>
+          <td class="col-duration">0.66</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[32mINFO    [0m root:test_create_customers_smoke.py:12 TEST: Create new customer with email and password only.
+[35mDEBUG   [0m root:genericutilities.py:6 Generating random email and password.
+[35mDEBUG   [0m root:genericutilities.py:21 Randomly generated email and password: {&#x27;email&#x27;: &#x27;testuser.ighywuowmd@example.com&#x27;, &#x27;password&#x27;: &#x27;DWGhpoHRfGlEBRcVFUtq&#x27;}
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:77 Signing request &lt;PreparedRequest [POST]&gt; using client &lt;Client client_key=ck_406159a820b33cd821d190656b5ae98ae940275a, client_secret=****, resource_owner_key=None, resource_owner_secret=None, signature_method=HMAC-SHA1, signature_type=AUTH_HEADER, callback_uri=None, rsa_key=None, verifier=None, realm=None, encoding=utf-8, decoding=utf-8, nonce=None, timestamp=None&gt;
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:91 Including body in call to sign: False
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:133 Collected params: [(&#x27;oauth_nonce&#x27;, &#x27;57980773995711832291600680770&#x27;), (&#x27;oauth_timestamp&#x27;, &#x27;1600680770&#x27;), (&#x27;oauth_version&#x27;, &#x27;1.0&#x27;), (&#x27;oauth_signature_method&#x27;, &#x27;HMAC-SHA1&#x27;), (&#x27;oauth_consumer_key&#x27;, &#x27;ck_406159a820b33cd821d190656b5ae98ae940275a&#x27;)]
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:137 Normalized params: oauth_consumer_key=ck_406159a820b33cd821d190656b5ae98ae940275a&amp;oauth_nonce=57980773995711832291600680770&amp;oauth_signature_method=HMAC-SHA1&amp;oauth_timestamp=1600680770&amp;oauth_version=1.0
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:138 Normalized URI: http://localhost:10003/wp-json/wc/v3/customers
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:143 Signing: signature base string: POST&amp;http%3A%2F%2Flocalhost%3A10003%2Fwp-json%2Fwc%2Fv3%2Fcustomers&amp;oauth_consumer_key%3Dck_406159a820b33cd821d190656b5ae98ae940275a%26oauth_nonce%3D57980773995711832291600680770%26oauth_signature_method%3DHMAC-SHA1%26oauth_timestamp%3D1600680770%26oauth_version%3D1.0
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:150 Signature: nq3qG/Fxdadi7QH5P28DxIY+JUQ=
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:320 Encoding URI, headers and body to utf-8.
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:114 Updated url: http://localhost:10003/wp-json/wc/v3/customers
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:115 Updated headers: {b&#x27;User-Agent&#x27;: b&#x27;python-requests/2.24.0&#x27;, b&#x27;Accept-Encoding&#x27;: b&#x27;gzip, deflate&#x27;, b&#x27;Accept&#x27;: b&#x27;*/*&#x27;, b&#x27;Connection&#x27;: b&#x27;keep-alive&#x27;, b&#x27;Content-type&#x27;: b&#x27;application/json&#x27;, b&#x27;Content-Length&#x27;: b&#x27;80&#x27;, b&#x27;Authorization&#x27;: b&#x27;OAuth oauth_nonce=&quot;57980773995711832291600680770&quot;, oauth_timestamp=&quot;1600680770&quot;, oauth_version=&quot;1.0&quot;, oauth_signature_method=&quot;HMAC-SHA1&quot;, oauth_consumer_key=&quot;ck_406159a820b33cd821d190656b5ae98ae940275a&quot;, oauth_signature=&quot;nq3qG%2FFxdadi7QH5P28DxIY%2BJUQ%3D&quot;&#x27;}
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:116 Updated body: &#x27;{&quot;email&quot;: &quot;testuser.ighywuowmd@example.com&quot;, &quot;password&quot;: &quot;DWGhpoHRfGlEBRcVFUtq&quot;}&#x27;
+[35mDEBUG   [0m urllib3.connectionpool:connectionpool.py:226 Starting new HTTP connection (1): localhost:10003
+[35mDEBUG   [0m urllib3.connectionpool:connectionpool.py:433 http://localhost:10003 &quot;POST /wp-json/wc/v3/customers HTTP/1.1&quot; 201 None
+[35mDEBUG   [0m root:requestutility.py:32 POST API response : {&#x27;id&#x27;: 27, &#x27;date_created&#x27;: &#x27;2020-09-21T09:32:51&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-21T09:32:51&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-21T09:32:51&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-21T09:32:51&#x27;, &#x27;email&#x27;: &#x27;testuser.ighywuowmd@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.ighywuowmd&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://1.gravatar.com/avatar/d28208acfff3451051be99f34d4830d3?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/27&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}
+[35mDEBUG   [0m root:db_utility.py:23 Executing : SELECT * FROM local.wp_users WHERE user_email= &#x27;testuser.ighywuowmd@example.com&#x27;;<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/customers/test_get_customers.py::test_get_all_customers</td>
+          <td class="col-duration">0.53</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:77 Signing request &lt;PreparedRequest [GET]&gt; using client &lt;Client client_key=ck_406159a820b33cd821d190656b5ae98ae940275a, client_secret=****, resource_owner_key=None, resource_owner_secret=None, signature_method=HMAC-SHA1, signature_type=AUTH_HEADER, callback_uri=None, rsa_key=None, verifier=None, realm=None, encoding=utf-8, decoding=utf-8, nonce=None, timestamp=None&gt;
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:91 Including body in call to sign: False
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:133 Collected params: [(&#x27;oauth_nonce&#x27;, &#x27;121881658427060245321600680771&#x27;), (&#x27;oauth_timestamp&#x27;, &#x27;1600680771&#x27;), (&#x27;oauth_version&#x27;, &#x27;1.0&#x27;), (&#x27;oauth_signature_method&#x27;, &#x27;HMAC-SHA1&#x27;), (&#x27;oauth_consumer_key&#x27;, &#x27;ck_406159a820b33cd821d190656b5ae98ae940275a&#x27;)]
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:137 Normalized params: oauth_consumer_key=ck_406159a820b33cd821d190656b5ae98ae940275a&amp;oauth_nonce=121881658427060245321600680771&amp;oauth_signature_method=HMAC-SHA1&amp;oauth_timestamp=1600680771&amp;oauth_version=1.0
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:138 Normalized URI: http://localhost:10003/wp-json/wc/v3/customers
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:143 Signing: signature base string: GET&amp;http%3A%2F%2Flocalhost%3A10003%2Fwp-json%2Fwc%2Fv3%2Fcustomers&amp;oauth_consumer_key%3Dck_406159a820b33cd821d190656b5ae98ae940275a%26oauth_nonce%3D121881658427060245321600680771%26oauth_signature_method%3DHMAC-SHA1%26oauth_timestamp%3D1600680771%26oauth_version%3D1.0
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:150 Signature: tXM/8s0zu02mMrLf5YRO3sE4BWg=
+[35mDEBUG   [0m oauthlib.oauth1.rfc5849:__init__.py:320 Encoding URI, headers and body to utf-8.
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:114 Updated url: http://localhost:10003/wp-json/wc/v3/customers
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:115 Updated headers: {b&#x27;User-Agent&#x27;: b&#x27;python-requests/2.24.0&#x27;, b&#x27;Accept-Encoding&#x27;: b&#x27;gzip, deflate&#x27;, b&#x27;Accept&#x27;: b&#x27;*/*&#x27;, b&#x27;Connection&#x27;: b&#x27;keep-alive&#x27;, b&#x27;Content-type&#x27;: b&#x27;application/json&#x27;, b&#x27;Content-Length&#x27;: b&#x27;28&#x27;, b&#x27;Authorization&#x27;: b&#x27;OAuth oauth_nonce=&quot;121881658427060245321600680771&quot;, oauth_timestamp=&quot;1600680771&quot;, oauth_version=&quot;1.0&quot;, oauth_signature_method=&quot;HMAC-SHA1&quot;, oauth_consumer_key=&quot;ck_406159a820b33cd821d190656b5ae98ae940275a&quot;, oauth_signature=&quot;tXM%2F8s0zu02mMrLf5YRO3sE4BWg%3D&quot;&#x27;}
+[35mDEBUG   [0m requests_oauthlib.oauth1_auth:oauth1_auth.py:116 Updated body: &#x27;{&quot;page&quot;: 1, &quot;per_page&quot;: 100}&#x27;
+[35mDEBUG   [0m urllib3.connectionpool:connectionpool.py:226 Starting new HTTP connection (1): localhost:10003
+[35mDEBUG   [0m urllib3.connectionpool:connectionpool.py:433 http://localhost:10003 &quot;GET /wp-json/wc/v3/customers HTTP/1.1&quot; 200 None
+[35mDEBUG   [0m root:requestutility.py:45 GET API response : [{&#x27;id&#x27;: 2, &#x27;date_created&#x27;: &#x27;2020-09-15T05:54:24&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-15T05:54:24&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-15T05:54:26&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-15T05:54:26&#x27;, &#x27;email&#x27;: &#x27;kiran@example.com&#x27;, &#x27;first_name&#x27;: &#x27;John&#x27;, &#x27;last_name&#x27;: &#x27;Doe&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;john.doe&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;John&#x27;, &#x27;last_name&#x27;: &#x27;Doe&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;969 Market&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;San Francisco&#x27;, &#x27;postcode&#x27;: &#x27;94103&#x27;, &#x27;country&#x27;: &#x27;US&#x27;, &#x27;state&#x27;: &#x27;CA&#x27;, &#x27;email&#x27;: &#x27;john.doe@example.com&#x27;, &#x27;phone&#x27;: &#x27;(555) 555-5555&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;John&#x27;, &#x27;last_name&#x27;: &#x27;Doe&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;969 Market&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;San Francisco&#x27;, &#x27;postcode&#x27;: &#x27;94103&#x27;, &#x27;country&#x27;: &#x27;US&#x27;, &#x27;state&#x27;: &#x27;CA&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://2.gravatar.com/avatar/8d3da2a2e0209c403f7f4f3f59ae4be3?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/2&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 23, &#x27;date_created&#x27;: &#x27;2020-09-20T11:45:32&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:45:32&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:45:32&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:45:32&#x27;, &#x27;email&#x27;: &#x27;testuser.abpxzcfhuo@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.abpxzcfhuo&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://1.gravatar.com/avatar/775d4e22458a7f0d2ca232db1f021efd?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/23&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 6, &#x27;date_created&#x27;: &#x27;2020-09-16T10:30:07&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-16T10:30:07&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-16T10:30:07&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-16T10:30:07&#x27;, &#x27;email&#x27;: &#x27;testuser.ahrixxtbvf@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.ahrixxtbvf&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://1.gravatar.com/avatar/7a386eb717e0daaf90b37527cdf71985?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/6&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 3, &#x27;date_created&#x27;: &#x27;2020-09-15T10:07:24&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-15T10:07:24&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-15T10:07:26&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-15T10:07:26&#x27;, &#x27;email&#x27;: &#x27;testuser.dafiyygxsp@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.dafiyygxsp&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://1.gravatar.com/avatar/1f98048b7a2c28d2ce07590133ee4007?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/3&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 14, &#x27;date_created&#x27;: &#x27;2020-09-20T11:23:13&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:23:13&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:23:13&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:23:13&#x27;, &#x27;email&#x27;: &#x27;testuser.dfdpobndoz@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.dfdpobndoz&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://0.gravatar.com/avatar/ff6031340b20e763f402d85442aee396?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/14&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 25, &#x27;date_created&#x27;: &#x27;2020-09-20T11:54:39&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:54:39&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:54:39&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:54:39&#x27;, &#x27;email&#x27;: &#x27;testuser.ewsssmeszw@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.ewsssmeszw&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://2.gravatar.com/avatar/29d87c1c5536e728893d1e2ecf79bf09?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/25&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 8, &#x27;date_created&#x27;: &#x27;2020-09-17T04:50:35&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-17T04:50:35&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-17T04:50:36&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-17T04:50:36&#x27;, &#x27;email&#x27;: &#x27;testuser.fczknlkokt@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.fczknlkokt&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://0.gravatar.com/avatar/336b08a7d29ac777717add6554f26850?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/8&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 13, &#x27;date_created&#x27;: &#x27;2020-09-20T11:12:54&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:12:54&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:12:54&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:12:54&#x27;, &#x27;email&#x27;: &#x27;testuser.hjnxfyyslu@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.hjnxfyyslu&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://0.gravatar.com/avatar/09da89b81d5f133333bd930c864ddcfb?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/13&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 12, &#x27;date_created&#x27;: &#x27;2020-09-20T09:18:37&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T09:18:37&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T09:18:37&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T09:18:37&#x27;, &#x27;email&#x27;: &#x27;testuser.htzbuiuqpf@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.htzbuiuqpf&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://2.gravatar.com/avatar/510d24c1c5a0733ef87a1af6994633e2?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/12&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 18, &#x27;date_created&#x27;: &#x27;2020-09-20T11:36:37&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:36:37&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:36:38&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:36:38&#x27;, &#x27;email&#x27;: &#x27;testuser.ifgsyclxwy@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.ifgsyclxwy&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://2.gravatar.com/avatar/b22d288415965c5473bcb91397a79280?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/18&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 27, &#x27;date_created&#x27;: &#x27;2020-09-21T09:32:51&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-21T09:32:51&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-21T09:32:51&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-21T09:32:51&#x27;, &#x27;email&#x27;: &#x27;testuser.ighywuowmd@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.ighywuowmd&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://1.gravatar.com/avatar/d28208acfff3451051be99f34d4830d3?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/27&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 7, &#x27;date_created&#x27;: &#x27;2020-09-17T04:46:51&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-17T04:46:51&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-17T04:46:52&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-17T04:46:52&#x27;, &#x27;email&#x27;: &#x27;testuser.iwmvzqblgj@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.iwmvzqblgj&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://0.gravatar.com/avatar/c2423cec527be76ccc04d1ecffc8a9a4?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/7&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 26, &#x27;date_created&#x27;: &#x27;2020-09-21T09:30:25&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-21T09:30:25&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-21T09:30:25&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-21T09:30:25&#x27;, &#x27;email&#x27;: &#x27;testuser.jmsvpehmup@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.jmsvpehmup&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://2.gravatar.com/avatar/b968b5bde0f42c874f40ad6031555703?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/26&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 16, &#x27;date_created&#x27;: &#x27;2020-09-20T11:30:38&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:30:38&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:30:38&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:30:38&#x27;, &#x27;email&#x27;: &#x27;testuser.jtpnnoxete@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.jtpnnoxete&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://1.gravatar.com/avatar/1b6fb096756ccd0b91148b61bd4856b4?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/16&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 15, &#x27;date_created&#x27;: &#x27;2020-09-20T11:27:06&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:27:06&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:27:06&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:27:06&#x27;, &#x27;email&#x27;: &#x27;testuser.kdnipqtsdi@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.kdnipqtsdi&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://2.gravatar.com/avatar/8b7b922f4e4c0d2fe042e615d1f87e8c?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/15&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 10, &#x27;date_created&#x27;: &#x27;2020-09-17T06:08:59&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-17T06:08:59&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-17T06:09:00&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-17T06:09:00&#x27;, &#x27;email&#x27;: &#x27;testuser.mugjdovmvq@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.mugjdovmvq&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://1.gravatar.com/avatar/4c49af658c28b7d77f23c0218f10c0f3?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/10&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 11, &#x27;date_created&#x27;: &#x27;2020-09-20T09:17:03&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T09:17:03&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T09:17:03&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T09:17:03&#x27;, &#x27;email&#x27;: &#x27;testuser.mzpnwbhabg@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.mzpnwbhabg&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://0.gravatar.com/avatar/6a8bdb73b666c278c9a2e46d6649e2cf?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/11&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 19, &#x27;date_created&#x27;: &#x27;2020-09-20T11:38:27&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:38:27&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:38:28&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:38:28&#x27;, &#x27;email&#x27;: &#x27;testuser.mzsngzrbil@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.mzsngzrbil&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://0.gravatar.com/avatar/9a3f6a5eba40ae56a773c4f391485ad9?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/19&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 22, &#x27;date_created&#x27;: &#x27;2020-09-20T11:43:26&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:43:26&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:43:27&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:43:27&#x27;, &#x27;email&#x27;: &#x27;testuser.pfebivmujb@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.pfebivmujb&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://2.gravatar.com/avatar/58c0336b6e4282493c0bfea661d5b916?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/22&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 24, &#x27;date_created&#x27;: &#x27;2020-09-20T11:46:34&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:46:34&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:46:34&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:46:34&#x27;, &#x27;email&#x27;: &#x27;testuser.roippdtnth@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.roippdtnth&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://1.gravatar.com/avatar/4d2e7fb23f7e81f65bf0c5c2e7f28915?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/24&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 5, &#x27;date_created&#x27;: &#x27;2020-09-16T10:07:44&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-16T10:07:44&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-16T10:07:44&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-16T10:07:44&#x27;, &#x27;email&#x27;: &#x27;testuser.sqbkxzcpop@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.sqbkxzcpop&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://0.gravatar.com/avatar/048b824749c4d549949325459f9060a8?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/5&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 4, &#x27;date_created&#x27;: &#x27;2020-09-15T10:20:01&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-15T10:20:01&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-15T10:20:02&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-15T10:20:02&#x27;, &#x27;email&#x27;: &#x27;testuser.ssrcacrody@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.ssrcacrody&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://1.gravatar.com/avatar/a40c06ac95be56ff523eb03927b15c69?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/4&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 9, &#x27;date_created&#x27;: &#x27;2020-09-17T06:03:57&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-17T06:03:57&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-17T06:04:01&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-17T06:04:01&#x27;, &#x27;email&#x27;: &#x27;testuser.sxcvcfvyjt@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.sxcvcfvyjt&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://2.gravatar.com/avatar/ec07ce4fd7db390cb27083b531415ea1?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/9&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 20, &#x27;date_created&#x27;: &#x27;2020-09-20T11:41:46&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:41:46&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:41:46&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:41:46&#x27;, &#x27;email&#x27;: &#x27;testuser.tsrnnzstlz@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.tsrnnzstlz&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://1.gravatar.com/avatar/43b73ae4f0716cbc76ea0428816afc34?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/20&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 17, &#x27;date_created&#x27;: &#x27;2020-09-20T11:35:53&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:35:53&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:35:53&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:35:53&#x27;, &#x27;email&#x27;: &#x27;testuser.ulqvekerjb@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.ulqvekerjb&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://2.gravatar.com/avatar/bcb68e4d995c1583d146f96723f2b440?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/17&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}, {&#x27;id&#x27;: 21, &#x27;date_created&#x27;: &#x27;2020-09-20T11:42:12&#x27;, &#x27;date_created_gmt&#x27;: &#x27;2020-09-20T11:42:12&#x27;, &#x27;date_modified&#x27;: &#x27;2020-09-20T11:42:12&#x27;, &#x27;date_modified_gmt&#x27;: &#x27;2020-09-20T11:42:12&#x27;, &#x27;email&#x27;: &#x27;testuser.xhkyijwbeu@example.com&#x27;, &#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;role&#x27;: &#x27;customer&#x27;, &#x27;username&#x27;: &#x27;testuser.xhkyijwbeu&#x27;, &#x27;billing&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;, &#x27;email&#x27;: &#x27;&#x27;, &#x27;phone&#x27;: &#x27;&#x27;}, &#x27;shipping&#x27;: {&#x27;first_name&#x27;: &#x27;&#x27;, &#x27;last_name&#x27;: &#x27;&#x27;, &#x27;company&#x27;: &#x27;&#x27;, &#x27;address_1&#x27;: &#x27;&#x27;, &#x27;address_2&#x27;: &#x27;&#x27;, &#x27;city&#x27;: &#x27;&#x27;, &#x27;postcode&#x27;: &#x27;&#x27;, &#x27;country&#x27;: &#x27;&#x27;, &#x27;state&#x27;: &#x27;&#x27;}, &#x27;is_paying_customer&#x27;: False, &#x27;avatar_url&#x27;: &#x27;http://0.gravatar.com/avatar/c039430ce20d3c2d8013ad0ccddae22c?s=96&amp;d=mm&amp;r=g&#x27;, &#x27;meta_data&#x27;: [], &#x27;_links&#x27;: {&#x27;self&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers/21&#x27;}], &#x27;collection&#x27;: [{&#x27;href&#x27;: &#x27;http://localhost:10003/wp-json/wc/v3/customers&#x27;}]}}]
+[35mDEBUG   [0m root:db_utility.py:23 Executing : SELECT * FROM local.wp_users;<br/></div></td></tr></tbody></table></body></html>
