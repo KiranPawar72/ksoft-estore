@@ -1,21 +1,28 @@
 
 from sqaapitest.src.dao.products_dao import Products_DAO
-from sqaapitest.src.dao.orders_dao import OrdersDAO
 from sqaapitest.src.helpers.orders_helper import OrdersHelper
+from sqaapitest.src.helpers.customers_helper import CustomerHelper
 import pytest
+
+@pytest.fixture(scope='module')
+def my_orders_smoke_setup():
+    # get a product from db
+    product_dao = Products_DAO()
+    rand_product = product_dao.get_random_product_from_db(1)
+    product_id = rand_product[0]['ID']
+    order_helper = OrdersHelper()
+    info = {'product_id' : product_id, 'order_helper': order_helper}
+
+    return info
 
 @pytest.mark.orders
 @pytest.mark.smoke
 @pytest.mark.tcid48
-def test_create_paid_order_guest_user():
-    product_dao = Products_DAO()
-    order_helper = OrdersHelper()
-    orders_dao = OrdersDAO()
+def test_create_paid_order_guest_user(my_orders_smoke_setup):
+    order_helper = my_orders_smoke_setup['order_helper']
 
-    # get a product from db
-    rand_product = product_dao.get_random_product_from_db(1)
-    product_id = rand_product[0]['ID']
-
+    customer_id = 0
+    product_id = my_orders_smoke_setup['product_id']
     # make the call
     info =  { "line_items": [
     {
@@ -26,25 +33,31 @@ def test_create_paid_order_guest_user():
     order_json = order_helper.create_order(additional_args=info)
 
     # verify response
-    assert order_json, f"Create order response is empty."
-    assert order_json['customer_id'] == 0, f"Create order as guest expected default customer_id=0" \
-                    f"but got '{order_json['customer_id']}"
-    assert len(order_json['line_items']) == 1, f"Expected only 1 item in order but " \
-                    f"found '{len(order_json['line_items'])}'" \
-                    f"Order id: {order_json['id']}."
+    expected_products =[{'product_id': product_id}]
+    order_helper.verify_order_is_created(order_json, customer_id, expected_products)
 
-    # verify db
-    order_id = order_json['id']
-    line_info = orders_dao.get_order_lines_by_order_id(order_id)
-    assert line_info, f"Create order, line item not found in DB. Order id: {order_id}"
+@pytest.mark.orders
+@pytest.mark.smoke
+@pytest.mark.tcid49
+def test_create_paid_order_new_created_customer(my_orders_smoke_setup):
+    # create helper objects
+    order_helper = my_orders_smoke_setup['order_helper']
+    customer_helper = CustomerHelper()
 
-    line_items = [i for i in line_info if i['order_item_type'] == 'line_item']
-    assert len(line_items), f"Expected 1 line item but found {len(line_items)}. Order id: {order_id}"
+    # make the call
+    cust_info = customer_helper.create_customer()
+    customer_id = cust_info['id']
+    product_id = my_orders_smoke_setup['product_id']
+    info =  { "line_items": [
+    {
+      "product_id": product_id,
+      "quantity": 1
+    }
+    ],
+    "customer_id": customer_id
+    }
+    order_json = order_helper.create_order(additional_args=info)
 
-    line_id = line_items[0]['order_item_id']
-    line_details = orders_dao.get_order_items_details(line_id)
-    db_product_id = line_details['_product_id']
-    assert str(db_product_id) == str(product_id), f"Create order 'product id' in db does not match in API." \
-                        f"API product id: {product_id}, DB product id: {db_product_id}"
-
-
+    # verify response
+    expected_products =[{'product_id': product_id}]
+    order_helper.verify_order_is_created(order_json, customer_id, expected_products)
