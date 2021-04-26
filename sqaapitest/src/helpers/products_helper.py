@@ -23,6 +23,9 @@ class ProductHelper(object):
         for i in range(1, max_pages + 1):
             LOG.debug(f"List products page number: {i}")
 
+            if not payload:
+                payload = {}
+
             if not 'per_page' in payload.keys():
                 payload['per_page'] = 10
 
